@@ -12,7 +12,7 @@ class ProjectController extends Controller
      */
     public function index()
     {
-        $projects = Project::with('tasks', 'user')->get();
+        $projects = Project::with('tasks', 'users')->get();
         $respond =[
             'status' => 200,
             'message' => 'These are all the projects',
@@ -38,6 +38,7 @@ class ProjectController extends Controller
     public function store(Request $request)
     {
         //
+        \Log::info($request->all()); // Log the incoming data
         $validator = Validator::make($request->all(), [
             'name' => 'required',
             'description' => 'required',
@@ -54,7 +55,6 @@ class ProjectController extends Controller
             $project = new Project;
             $project->name = $request->name;
             $project->description = $request->description;
-            $project->user_id = Auth::user()->id;
             $project->save();
             $project->users()->attach(Auth::user()->id, ['is_admin' => true]);
             $respond = [
@@ -80,7 +80,7 @@ class ProjectController extends Controller
     public function show(string $id)
     {
         //
-        $project = Project::with('user', 'task', 'comment')->find($id);
+        $project = Project::with('users', 'tasks')->find($id);
         if (isset($project)) {
             $respond = [
                 'status' => 200,
@@ -111,26 +111,38 @@ class ProjectController extends Controller
     public function update(Request $request, string $id)
     {
         //
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string'
+        ]);
+    
         $project = Project::find($id);
-        if (isset($project)) {
-            $project->name = $request->name;
-            $project->description = $request->description;
-            $project->user_id = $request->user_id;
-            $project->save();
+        if (!$project) {
+            return response([
+                'status' => 404,
+                'message' => "This project id $id does not exist",
+                'data' => null
+            ], 404);
+        }
+
+        $isAdmin = $project->users()->where('user_id', Auth::id())->wherePivot('is_admin', true)->exists();
+
+        if (!$isAdmin) {
+            return response([
+                'status' => 403,
+                'message' => 'Unauthorized',
+                'data' => null
+            ], 403);
+        }
+
+        $project->name = $validated['name'];
+        $project->description = $validated['description'];
+        $project->save();
             $respond = [
                 'status' => 200,
                 'message' => "Project with id $id updated successfully!",
                 'data' => $project
             ];
-            return response($respond, 200);
-        }
-
-        $respond = [
-            'status' => 401,
-            'message' => "This project id $id does not exist",
-            'data' => null
-        ];
-        return response($respond, 401);
     }
 
     /**
@@ -140,7 +152,15 @@ class ProjectController extends Controller
     {
         //
         $project = Project::find($id);
+        $isAdmin = $project->users()->where('user_id', Auth::id())->wherePivot('is_admin', true)->exists();
 
+if (!$isAdmin) {
+    return response([
+        'status' => 403,
+        'message' => 'Unauthorized',
+        'data' => null
+    ], 403);
+}
         if (isset($project)) {
             $project->delete();
             $respond = [
