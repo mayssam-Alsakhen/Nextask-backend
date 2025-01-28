@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('project_user', function (Blueprint $table) {
-            $table->id();
+        $table->id();
         $table->unsignedBigInteger('project_id');
         $table->unsignedBigInteger('user_id');
         $table->boolean('is_admin')->default(false); 

@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Project;
+use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 class ProjectController extends Controller
 {
     /**
@@ -39,6 +41,7 @@ class ProjectController extends Controller
     {
         //
         \Log::info($request->all()); // Log the incoming data
+        
         $validator = Validator::make($request->all(), [
             'name' => 'required',
             'description' => 'required',
@@ -97,6 +100,27 @@ class ProjectController extends Controller
         return response($respond, 401);
     }
 
+    // get projects for specific user
+    public function getProjectsByUserId($id)
+{
+    $user = \App\Models\User::find($id);
+
+    if (!$user) {
+        return response([
+            'status' => 404,
+            'message' => 'User not found',
+            'data' => null
+        ], 404);
+    }
+    $projects = $user->projects()->with('tasks')->get();
+
+    return response([
+        'status' => 200,
+        'message' => "Projects for user ID $id",
+        'data' => $projects
+    ], 200);
+}
+
     /**
      * Show the form for editing the specified resource.
      */
@@ -138,11 +162,11 @@ class ProjectController extends Controller
         $project->name = $validated['name'];
         $project->description = $validated['description'];
         $project->save();
-            $respond = [
-                'status' => 200,
-                'message' => "Project with id $id updated successfully!",
-                'data' => $project
-            ];
+        return response([
+            'status' => 200,
+            'message' => "Project with id $id updated successfully!",
+            'data' => $project
+        ], 200);
     }
 
     /**
@@ -177,4 +201,135 @@ if (!$isAdmin) {
         ];
         return response($respond, 401);
     }
+
+    // add user
+    public function addUserToProject(Request $request, $projectId)
+{
+    $request->validate([
+        'email' => 'required|email',
+    ]);
+
+    $project = Project::find($projectId);
+    if (!$project) {
+        return response()->json(['message' => 'Project not found'], 404);
+    }
+
+    $requestingUser = Auth::user();
+    if (!$project->users()->where('user_id', $requestingUser->id)->where('is_admin', true)->exists()) {
+        return response()->json(['message' => 'Unauthorized'], 403);
+    }
+    $user = User::where('email', $request->email)->first();
+    if (!$user) {
+        return response()->json(['message' => 'User not found'], 404);
+    }
+
+    if ($project->users()->where('user_id', $user->id)->exists()) {
+        return response()->json(['message' => 'User already assigned to this project'], 400);
+    }
+
+    $project->users()->attach($user->id, ['is_admin' => false]);
+
+    // Optional: Log the action
+    Log::info("User {$user->id} was added to Project {$project->id} by Admin {$requestingUser->id}");
+
+    return response()->json(['message' => 'User added to project successfully'], 200);
+}
+
+// remove user
+public function removeUserFromProject(Request $request, $projectId, $userId)
+{
+    $project = Project::findOrFail($projectId);
+    $user = User::findOrFail($userId);
+
+    // Check if the user is assigned to the project
+    if (!$project->users()->where('user_id', $userId)->exists()) {
+        return response([
+            'status' => 404,
+            'message' => 'User not found in this project.',
+            'data' => null
+        ], 404);
+    }
+
+    // Check if the user being removed is the only admin
+    $isOnlyAdmin = $project->users()->wherePivot('is_admin', true)->count() == 1;
+
+    if ($isOnlyAdmin && $project->users()->wherePivot('is_admin', true)->where('user_id', $userId)->exists()) {
+        return response([
+            'status' => 403,
+            'message' => 'Cannot remove this user. They are the only admin of the project.',
+            'data' => null
+        ], 403);
+    }
+
+    // Case 1: Admin removes a user
+    if ($project->users()->where('user_id', $request->user()->id)->wherePivot('is_admin', true)->exists()) {
+        $project->users()->detach($userId);
+        Log::info("User {$user->id} removed from project {$project->id} by admin {$request->user()->id}");
+
+        return response([
+            'status' => 200,
+            'message' => 'User removed from project successfully.',
+            'data' => $project
+        ], 200);
+    }
+
+    // Case 2: User leaves the project
+    if ($request->user()->id === $userId) {
+        $project->users()->detach($userId);
+        Log::info("User {$user->id} left the project {$project->id}");
+
+        return response([
+            'status' => 200,
+            'message' => 'You have successfully left the project.',
+            'data' => $project
+        ], 200);
+    }
+
+    // If neither case applies, return unauthorized
+    return response([
+        'status' => 403,
+        'message' => 'You do not have permission to remove this user.',
+        'data' => null
+    ], 403);
+}
+
+
+
+// set user as admin
+public function setUserAsAdmin(Request $request, $projectId, $userId)
+{
+    $project = Project::findOrFail($projectId);
+    $user = User::findOrFail($userId);
+
+    // Check if user is already admin
+    $isAdmin = $project->users()->where('user_id', $userId)->wherePivot('is_admin', true)->exists();
+    if ($isAdmin) {
+        return response([
+            'status' => 400,
+            'message' => 'User is already an admin.',
+            'data' => null
+        ], 400);
+    }
+
+    // Check if the current user is an admin
+    if (!$project->users()->where('user_id', $request->user()->id)->wherePivot('is_admin', true)->exists()) {
+        return response([
+            'status' => 403,
+            'message' => 'You must be an admin to promote users.',
+            'data' => null
+        ], 403);
+    }
+
+    // Update user to be admin
+    $project->users()->updateExistingPivot($userId, ['is_admin' => true]);
+
+    Log::info("User {$user->id} is promoted to admin in project {$project->id} by admin {$request->user()->id}");
+
+    return response([
+        'status' => 200,
+        'message' => 'User promoted to admin successfully.',
+        'data' => $project
+    ], 200);
+}
+
 }
