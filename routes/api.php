@@ -22,11 +22,22 @@ Route::middleware(['jwt.auth'])->group(function () {
         // add a user to the project
     Route::post('/projects/{projectId}/add-user', [ProjectController::class, 'addUserToProject']);
     Route::put('/projects/{projectId}/users/{userId}/admin', [ProjectController::class, 'setUserAsAdmin']);
+    Route::put('projects/{projectId}/remove-admin/{userId}', [ProjectController::class, 'removeAdminPrivilege']);
     Route::delete('/projects/{projectId}/users/{userId}', [ProjectController::class, 'removeUserFromProject']);
 
+    //tasks routes
     Route::post('/tasks', [TaskController::class, 'store']);
     Route::get('/tasks', [TaskController::class, 'index']);
-    Route::resource('users', UserController::class);
+    Route::get('/tasks/{id}', [TaskController::class, 'show']);
+    Route::put('/tasks/{id}', [TaskController::class, 'update']);
+    Route::delete('/tasks/{id}', [TaskController::class, 'destroy']);
+      
+    // user routes
+    Route::get('/user/{id}', [UserController::class, 'show']);
+    Route::put('/user/{id}', [UserController::class, 'update']);
+    Route::delete('/user/{id}', [UserController::class, 'destroy']);   
+    Route::post('/user/search', [UserController::class, 'searchByEmail']);
+    
     Route::resource('comments', CommentController::class);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);

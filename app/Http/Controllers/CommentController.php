@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Comment;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 
 class CommentController extends Controller
 {
@@ -34,40 +36,46 @@ class CommentController extends Controller
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'content' => 'required',
-        ]);
-        if ($validator->fails()) {
-            $respond = [
-                'status' => 401,
-                'message' => $validator->errors()->first(),
-                'data' => null,
-            ];
-            return response($respond, 401);
-        }
+{
+    $validator = Validator::make($request->all(), [
+        'content' => 'required',
+        'task_id' => 'required|exists:tasks,id',
+    ]);
 
-        if (Auth::check()) {
-            $comment = new Comment;
-            $comment->content = $request->content;
-            $comment->task_id = $request->task_id;
-            $comment->user_id = Auth::user()->id;
-            $comment->save();
-
-            $respond = [
-                'status' => 200,
-                'message' => 'Comment added successfully!',
-                'data' => $comment
-            ];
-            return response($respond, 200);
-        }
-        $respond = [
-            'status' => 403,
-            'message' => 'Unauthorized',
-            'data' => null
-        ];
-        return response($respond, 403);
+    if ($validator->fails()) {
+        return response([
+            'status' => 400,
+            'message' => $validator->errors()->first(),
+            'data' => null,
+        ], 400);
     }
+
+    $user = Auth::user();
+    $task = Task::findOrFail($request->task_id);
+    $project = $task->project; // Get the project of the task
+
+    // Check if the user is assigned to this project
+    if (!$project->users()->where('user_id', $user->id)->exists()) {
+        return response([
+            'status' => 403,
+            'message' => 'You are not assigned to this project, so you cannot add comments.',
+            'data' => null,
+        ], 403);
+    }
+
+    // Create the comment
+    $comment = Comment::create([
+        'content' => $request->content,
+        'task_id' => $request->task_id,
+        'user_id' => $user->id,
+    ]);
+
+    return response([
+        'status' => 200,
+        'message' => 'Comment added successfully!',
+        'data' => $comment,
+    ], 200);
+}
 
     /**
      * Display the specified resource.
@@ -78,7 +86,7 @@ class CommentController extends Controller
         if (isset($comment)) {
             $respond = [
                 'status' => 200,
-                'message' => "Comment with id $id",
+                'message' => "Comment with task id $id",
                 'data' => $comment
             ];
             return response($respond, 200);
@@ -131,22 +139,36 @@ class CommentController extends Controller
      */
     public function destroy($id)
     {
+        $user = Auth::user();
         $comment = Comment::find($id);
-
-        if (isset($comment)) {
-            $comment->delete();
-            $respond = [
-                'status' => 200,
-                'message' => "Comment with id $id is deleted successfully!",
-                'data' => Comment::all()
-            ];
-            return response($respond, 200);
+    
+        if (!$comment) {
+            return response([
+                'status' => 404,
+                'message' => "Comment not found",
+                'data' => null,
+            ], 404);
         }
-        $respond = [
-            'status' => 401,
-            'message' => "This comment id $id does not exist",
-            'data' => null
-        ];
-        return response($respond, 401);
-    }
+    
+        $task = $comment->task;
+        $project = $task->project;
+    
+        // Check if the user is the comment owner or an admin of the project
+        $isAdmin = $project->users()->where('user_id', $user->id)->wherePivot('is_admin', true)->exists();
+        if ($comment->user_id !== $user->id && !$isAdmin) {
+            return response([
+                'status' => 403,
+                'message' => 'You do not have permission to delete this comment.',
+                'data' => null,
+            ], 403);
+        }
+    
+        $comment->delete();
+    
+        return response([
+            'status' => 200,
+            'message' => "Comment deleted successfully!",
+            'data' => null,
+        ], 200);
+    }    
 }

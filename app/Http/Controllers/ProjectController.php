@@ -229,7 +229,6 @@ if (!$isAdmin) {
 
     $project->users()->attach($user->id, ['is_admin' => false]);
 
-    // Optional: Log the action
     Log::info("User {$user->id} was added to Project {$project->id} by Admin {$requestingUser->id}");
 
     return response()->json(['message' => 'User added to project successfully'], 200);
@@ -332,4 +331,56 @@ public function setUserAsAdmin(Request $request, $projectId, $userId)
     ], 200);
 }
 
+// stop user from being admin
+public function removeAdminPrivilege(Request $request, $projectId, $userId)
+{
+    $project = Project::findOrFail($projectId);
+    $user = User::findOrFail($userId);
+
+    // Check if the user is an admin of the project
+    $userIsAdmin = $project->users()->where('user_id', $userId)->wherePivot('is_admin', true)->exists();
+
+    if (!$userIsAdmin) {
+        return response([
+            'status' => 404,
+            'message' => 'User is not an admin of this project.',
+            'data' => null
+        ], 404);
+    }
+
+    // Case 1: The user trying to remove admin privileges is the project creator (admin)
+    $isCreator = $project->users()->where('user_id', $request->user()->id)->wherePivot('is_admin', true)->exists();
+
+    if ($isCreator) {
+        // Check if there's more than one admin in the project
+        $adminCount = $project->users()->wherePivot('is_admin', true)->count();
+
+        // If the admin is the only one, prevent removing their admin status
+        if ($adminCount === 1) {
+            return response([
+                'status' => 403,
+                'message' => 'You cannot remove admin privileges when you are the only admin.',
+                'data' => null
+            ], 403);
+        }
+
+        // Remove admin privileges from the user
+        $project->users()->updateExistingPivot($userId, ['is_admin' => false]);
+
+        Log::info("Admin privilege removed from user {$user->id} in project {$project->id} by admin {$request->user()->id}");
+
+        return response([
+            'status' => 200,
+            'message' => 'Admin privileges removed from the user successfully.',
+            'data' => $project
+        ], 200);
+    }
+
+    // If the user is not the project creator, return an unauthorized response
+    return response([
+        'status' => 403,
+        'message' => 'You do not have permission to remove admin privileges from this user.',
+        'data' => null
+    ], 403);
+}
 }
