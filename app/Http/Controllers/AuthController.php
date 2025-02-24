@@ -33,8 +33,12 @@ class AuthController extends Controller
     
         return response()->json([
             'message' => 'User registered successfully',
-            'user' => $user,
             'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email
+            ]
         ], 201);
     }
     
@@ -47,10 +51,15 @@ public function login(Request $request)
     if (!$token = JWTAuth::attempt($credentials)) {
         return response()->json(['error' => 'Invalid credentials'], 401);
     }
-
+    $user = auth()->user();
     return response()->json([
         'message' => 'Login successful',
         'token' => $token,
+        'user' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email
+        ]
     ]);
 }
 

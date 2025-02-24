@@ -15,10 +15,10 @@ return new class extends Migration
         $table->id();
         $table->string('title');
         $table->text('description')->nullable();
-        $table->string('category')->default('pending');
+        $table->date('due_date');
+        $table->string('category')->default('Pending');
         $table->boolean('is_important')->default(false);
         $table->foreignId('project_id')->constrained()->onDelete('cascade');
-        $table->foreignId('user_id')->constrained()->onDelete('cascade'); // Added user_id
         $table->timestamps();
         });
     }

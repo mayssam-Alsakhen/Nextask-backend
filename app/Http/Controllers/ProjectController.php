@@ -38,44 +38,60 @@ class ProjectController extends Controller
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
-    {
-        //
-        \Log::info($request->all()); // Log the incoming data
-        
-        $validator = Validator::make($request->all(), [
-            'name' => 'required',
-            'description' => 'required',
-        ]);
+{
+    // Log the incoming request data for debugging
+    \Log::info('Incoming Project Request:', $request->all());
 
-        if ($validator->fails()) {
-            return response([
-                'status' => 401,
-                'message' => $validator->errors()->first(),
-                'data' => null
-            ], 401);
-        }
-        if (Auth::check()) {
-            $project = new Project;
-            $project->name = $request->name;
-            $project->description = $request->description;
-            $project->save();
-            $project->users()->attach(Auth::user()->id, ['is_admin' => true]);
-            $respond = [
-                'status' => 200,
-                'message' => 'Project added successfully!',
-                'data' => $project
-            ];
-            return response($respond, 200);
-        }
+    $validator = Validator::make($request->all(), [
+        'name' => 'required|string|max:255',
+        'description' => 'required|string',
+        'assigned_users' => 'nullable|array',           
+        'assigned_users.*' => 'exists:users,id',
+    ]);
 
-        $respond = [
-            'status' => 403,
-            'message' => 'Unauthorized',
+    if ($validator->fails()) {
+        return response([
+            'status' => 401,
+            'message' => $validator->errors()->first(),
             'data' => null
-        ];
-        return response($respond, 403);
-
+        ], 401);
     }
+
+    if (Auth::check()) {
+        $creatorId = Auth::id(); 
+
+        $project = new Project();
+        $project->name = $request->name;
+        $project->description = $request->description;
+        $project->save();
+
+        $project->users()->attach($creatorId, ['is_admin' => true]);
+
+        if ($request->has('assigned_users')) {
+
+            $usersToAssign = array_diff($request->assigned_users, [$creatorId]);
+            
+            if (!empty($usersToAssign)) {
+                $project->users()->attach($usersToAssign); 
+            }
+        }
+
+        // Return success response
+        return response([
+            'status' => 200,
+            'message' => 'Project created successfully!',
+            'data' => $project
+        ], 200);
+    }
+
+    // Unauthorized response
+    return response([
+        'status' => 403,
+        'message' => 'Unauthorized',
+        'data' => null
+    ], 403);
+}
+
 
     /**
      * Display the specified resource.
@@ -83,7 +99,7 @@ class ProjectController extends Controller
     public function show(string $id)
     {
         //
-        $project = Project::with('users', 'tasks')->find($id);
+        $project = Project::with('users', 'tasks.users')->find($id);
         if (isset($project)) {
             $respond = [
                 'status' => 200,
@@ -348,7 +364,8 @@ public function removeAdminPrivilege(Request $request, $projectId, $userId)
         ], 404);
     }
 
-    // Case 1: The user trying to remove admin privileges is the project creator (admin)
+    // Case 1: The user trying to remove adm
+    // in privileges is the project creator (admin)
     $isCreator = $project->users()->where('user_id', $request->user()->id)->wherePivot('is_admin', true)->exists();
 
     if ($isCreator) {

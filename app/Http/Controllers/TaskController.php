@@ -74,7 +74,7 @@ class TaskController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'project_id' => 'required|exists:projects,id',
-            'due_date' => 'nullable|date',
+            'due_date' => 'required|date',
             'isImportant' => 'required|boolean',
             'assigned_users' => 'nullable|array',         // Ensure assigned_users is an array
             'assigned_users.*' => 'exists:users,id',       // Validate each user ID exists
@@ -162,7 +162,7 @@ class TaskController extends Controller
             'description' => 'string|nullable',
             'due_date' => 'date|nullable',
             'isImportant' => 'boolean|nullable',
-            'category' => 'string|in:pending,in progress,done,testing|nullable',
+            'category' => 'string|in:Pending,In Progress,Completed,Test|nullable',
             'assigned_users' => 'array|nullable',
             'assigned_users.*' => 'exists:users,id',
         ]);
