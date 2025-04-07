@@ -17,9 +17,10 @@ Route::middleware(['jwt.auth'])->group(function () {
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::get('/projects/user/{id}', [ProjectController::class, 'getProjectsByUserId']);
     Route::get('/projects/{id}', [ProjectController::class, 'show']);
+    Route::get('/search-project', [ProjectController::class, 'search']);
     Route::put('/projects/{id}', [ProjectController::class, 'update']);
     Route::delete('/projects/{id}', [ProjectController::class, 'destroy']);
-        // add a user to the project
+          // add a user to the project
     Route::post('/projects/{projectId}/add-user', [ProjectController::class, 'addUserToProject']);
     Route::put('/projects/{projectId}/users/{userId}/admin', [ProjectController::class, 'setUserAsAdmin']);
     Route::put('projects/{projectId}/remove-admin/{userId}', [ProjectController::class, 'removeAdminPrivilege']);

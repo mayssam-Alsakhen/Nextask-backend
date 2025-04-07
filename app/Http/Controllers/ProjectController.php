@@ -14,7 +14,7 @@ class ProjectController extends Controller
      */
     public function index()
     {
-        $projects = Project::with('tasks', 'users')->get();
+        $projects = Project::with('createdBy', 'updatedBy','tasks', 'users')->get();
         $respond =[
             'status' => 200,
             'message' => 'These are all the projects',
@@ -63,6 +63,7 @@ class ProjectController extends Controller
         $project = new Project();
         $project->name = $request->name;
         $project->description = $request->description;
+        $project->created_by = $creatorId;
         $project->save();
 
         $project->users()->attach($creatorId, ['is_admin' => true]);
@@ -99,7 +100,8 @@ class ProjectController extends Controller
     public function show(string $id)
     {
         //
-        $project = Project::with('users', 'tasks.users')->find($id);
+        $project = Project::with('createdBy', 'updatedBy','users', 'tasks.users')->find($id);
+        
         if (isset($project)) {
             $respond = [
                 'status' => 200,
@@ -128,7 +130,10 @@ class ProjectController extends Controller
             'data' => null
         ], 404);
     }
-    $projects = $user->projects()->with('tasks')->get();
+    $projects = $user->projects()
+    ->with('tasks')
+    ->withCount('users')
+    ->get();
 
     return response([
         'status' => 200,
@@ -177,6 +182,7 @@ class ProjectController extends Controller
 
         $project->name = $validated['name'];
         $project->description = $validated['description'];
+        $project->updated_by = Auth::id();
         $project->save();
         return response([
             'status' => 200,
@@ -400,4 +406,39 @@ public function removeAdminPrivilege(Request $request, $projectId, $userId)
         'data' => null
     ], 403);
 }
+
+// search for projects
+// In your ProjectController or similar
+public function search(Request $request)
+{
+    $user = auth()->user();
+    Log::info('Authenticated User:', ['user' => $user]);
+
+    if (!$user) {
+        return response()->json([
+            'status' => 401,
+            'message' => 'Unauthorized: Invalid token'
+        ]);
+    }
+
+    // Get the search term from the request
+    $searchTerm = $request->input('search');
+    \Log::info('Search term: ' . $searchTerm); 
+
+    // Search for projects (name or description)
+    $projects = Project::where('name', 'like', '%' . $searchTerm . '%')
+                       ->orWhere('description', 'like', '%' . $searchTerm . '%')
+                       ->with('tasks')
+                       ->withCount('users')
+                       ->get();
+
+    // Return both users and projects in one response
+    return response()->json([
+        // 'users' => $users,
+        'projects' => $projects,
+    ]);
+}
+
+
+
 }
