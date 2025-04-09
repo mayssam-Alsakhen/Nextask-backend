@@ -99,8 +99,12 @@ class ProjectController extends Controller
      */
     public function show(string $id)
     {
-        //
-        $project = Project::with('createdBy', 'updatedBy','users', 'tasks.users')->find($id);
+        $user = Auth::user();
+        $project = Project::with('createdBy', 'updatedBy','users', 'tasks.users')
+        ->whereHas('users', function ($query) use ($user) {
+            $query->where('users.id', $user->id);
+        })
+        ->find($id);
         
         if (isset($project)) {
             $respond = [
@@ -112,10 +116,10 @@ class ProjectController extends Controller
         }
 
         $respond = [
-            'status' => 401,
-            'message' => 'Please enter an existing id'
+            'status' => 403,
+            'message' => 'Unauthorized or project not found'
         ];
-        return response($respond, 401);
+        return response($respond, 403);
     }
 
     // get projects for specific user
@@ -408,7 +412,6 @@ public function removeAdminPrivilege(Request $request, $projectId, $userId)
 }
 
 // search for projects
-// In your ProjectController or similar
 public function search(Request $request)
 {
     $user = auth()->user();
@@ -422,19 +425,18 @@ public function search(Request $request)
     }
 
     // Get the search term from the request
-    $searchTerm = $request->input('search');
-    \Log::info('Search term: ' . $searchTerm); 
+    $searchTerm = $request->query('search');
 
-    // Search for projects (name or description)
-    $projects = Project::where('name', 'like', '%' . $searchTerm . '%')
-                       ->orWhere('description', 'like', '%' . $searchTerm . '%')
-                       ->with('tasks')
-                       ->withCount('users')
-                       ->get();
-
-    // Return both users and projects in one response
+    $projects = Auth::user()
+        ->projects()
+        ->where(function ($query) use ($searchTerm) {
+            $query->where('name', 'like', "%{$searchTerm}%")
+                  ->orWhere('description', 'like', "%{$searchTerm}%");
+        })
+        ->with('tasks')
+        ->withCount('users')
+        ->get();
     return response()->json([
-        // 'users' => $users,
         'projects' => $projects,
     ]);
 }

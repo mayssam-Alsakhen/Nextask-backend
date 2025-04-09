@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -104,8 +105,13 @@ class UserController extends Controller
         $validatedData = $request->validate([
             'name' => 'string|max:255',
             'email' => 'email|unique:users,email,' . $id,
-            'password' => 'nullable|min:6|confirmed',
+            'password' => 'nullable|min:8|confirmed',
+            'previousPassword' => 'required|string|min:8',
         ]);
+
+        if (!Hash::check($validatedData['previousPassword'], $user->password)) {
+            return response()->json(['message' => 'The previous password is incorrect.'], 422);
+        }
 
         $user->name = $validatedData['name'] ?? $user->name;
         $user->email = $validatedData['email'] ?? $user->email;
