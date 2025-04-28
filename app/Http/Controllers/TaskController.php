@@ -76,8 +76,8 @@ class TaskController extends Controller
             'project_id' => 'required|exists:projects,id',
             'due_date' => 'required|date',
             'isImportant' => 'required|boolean',
-            'assigned_users' => 'nullable|array',         // Ensure assigned_users is an array
-            'assigned_users.*' => 'exists:users,id',       // Validate each user ID exists
+            'assigned_users' => 'nullable|array',
+            'assigned_users.*' => 'exists:users,id',
         ]);
 
         // Log validated data for debugging
@@ -86,14 +86,17 @@ class TaskController extends Controller
         // Create the task
         $task = Task::create([
             'title' => $validated['title'],
-            'description' => $validated['description'],
+            'description' => $validated['description'] ?? null,
             'project_id' => $validated['project_id'],
             'due_date' => $validated['due_date'],
             'is_important' => $validated['isImportant'],
+            'progress' => 0,
         ]);
 
         // Assign multiple users to the task
-        $task->users()->sync($validated['assigned_users']);
+        if (!empty($validated['assigned_users'])) {
+            $task->users()->sync($validated['assigned_users']);
+        }
 
         // Return a success response
         return response()->json([
@@ -155,74 +158,80 @@ class TaskController extends Controller
      * Update the specified resource in storage.
      */
     public function update(Request $request, $id)
-    {
-        // Validate input
-        $validatedData = $request->validate([
-            'title' => 'string|max:255|nullable',
-            'description' => 'string|nullable',
-            'due_date' => 'date|nullable',
-            'isImportant' => 'boolean|nullable',
-            'category' => 'string|in:Pending,In Progress,Completed,Test|nullable',
-            'assigned_users' => 'array|nullable',
-            'assigned_users.*' => 'exists:users,id',
-        ]);
-    
-        // Find the task
-        $task = Task::find($id);
-        if (!$task) {
-            return response()->json(['message' => 'Task not found.'], 404);
-        }
-    
-        // Get the logged-in user
-        $user = Auth::user();
-    
-        // Check if the user is assigned to the task or is an admin of the project
-        $isAdmin = $task->project->users()->where('user_id', $user->id)->wherePivot('is_admin', true)->exists();
-        $isAssignedUser = $task->users()->where('user_id', $user->id)->exists();
-    
-        if (!$isAdmin && !$isAssignedUser) {
-            return response()->json(['message' => 'You are not authorized to update this task.'], 403);
-        }
-    
-        // Admin: Full control over task updates
-        if ($isAdmin) {
-            if ($request->has('title')) {
-                $task->title = $validatedData['title'];
-            }
-            if ($request->has('description')) {
-                $task->description = $validatedData['description'];
-            }
-            if ($request->has('due_date')) {
-                $task->due_date = $validatedData['due_date'];
-            }
-            if ($request->has('isImportant')) {
-                $task->is_important = $validatedData['isImportant'];
-            }
-            if ($request->has('category')) {
-                $task->category = $validatedData['category'];
-            }
-    
-            // Handle assigned users
-            if ($request->has('assigned_users')) {
-                $task->users()->sync($validatedData['assigned_users']);
-            }
-    
-            $task->save();
-            return response()->json(['message' => 'Task updated successfully by admin.', 'task' => $task], 200);
-        }
-    
-        // Assigned User: Only allowed to update category
-        if ($isAssignedUser) {
-            if ($request->has('category')) {
-                $task->category = $validatedData['category'];
-                $task->save();
-                return response()->json(['message' => 'Task updated successfully.', 'task' => $task], 200);
-            }
-    
-            // If non-admin tries to update any other field, return error
-            return response()->json(['message' => 'You are only allowed to update the task category.'], 403);
-        }
+{
+    // Validate input
+    $validatedData = $request->validate([
+        'title' => 'string|max:255|nullable',
+        'description' => 'string|nullable',
+        'due_date' => 'date|nullable',
+        'isImportant' => 'boolean|nullable',
+        'category' => 'string|in:Pending,In Progress,Completed,Test|nullable',
+        'assigned_users' => 'array|nullable',
+        'assigned_users.*' => 'exists:users,id',
+    ]);
+
+    // Find the task
+    $task = Task::find($id);
+    if (!$task) {
+        return response()->json(['message' => 'Task not found.'], 404);
     }
+
+    // Get the logged-in user
+    $user = Auth::user();
+
+    // Check if the user is assigned to the task or is an admin of the project
+    $isAdmin = $task->project->users()
+        ->where('user_id', $user->id)
+        ->wherePivot('is_admin', true)
+        ->exists();
+    $isAssignedUser = $task->users()
+        ->where('user_id', $user->id)
+        ->exists();
+
+    if (!$isAdmin && !$isAssignedUser) {
+        return response()->json(['message' => 'You are not authorized to update this task.'], 403);
+    }
+
+    // Admin: Full control over task updates
+    if ($isAdmin) {
+        if ($request->has('title')) {
+            $task->title = $validatedData['title'];
+        }
+        if ($request->has('description')) {
+            $task->description = $validatedData['description'];
+        }
+        if ($request->has('due_date')) {
+            $task->due_date = $validatedData['due_date'];
+        }
+        if ($request->has('isImportant')) {
+            $task->is_important = $validatedData['isImportant'];
+        }
+        if ($request->has('category')) {
+            $task->category = $validatedData['category'];
+        }
+
+        // Handle assigned users
+        if ($request->has('assigned_users')) {
+            $task->users()->sync($validatedData['assigned_users']);
+        }
+
+        $task->save();
+        return response()->json(['message' => 'Task updated successfully by admin.', 'task' => $task], 200);
+    }
+
+    // Assigned User: Only allowed to update category
+    if ($isAssignedUser) {
+        if ($request->has('category')) {
+            $task->category = $validatedData['category'];
+            $task->save();
+            return response()->json(['message' => 'Task updated successfully.', 'task' => $task], 200);
+        }
+
+        // If non-admin tries to update any other field, return error
+        return response()->json(['message' => 'You are only allowed to update the task category.'], 403);
+    }
+}
+
     
 
     /**
@@ -252,5 +261,35 @@ class TaskController extends Controller
 
     return response()->json(['message' => 'Task deleted successfully.'], 200);
 }
+
+/**
+ * Update the progress of the task.
+ */
+public function updateProgress(Request $request, $id)
+{
+    $validatedData = $request->validate([
+        'progress' => 'required|integer|min:0|max:100',
+    ]);
+
+    $task = Task::find($id);
+    if (!$task) {
+        return response()->json(['message' => 'Task not found.'], 404);
+    }
+    $user = Auth::user();
+    $isAdmin = $task->project->users()->where('user_id', $user->id)->wherePivot('is_admin', true)->exists();
+    $isAssignedUser = $task->users()->where('user_id', $user->id)->exists();
+
+    if (!$isAdmin && !$isAssignedUser) {
+        return response()->json(['message' => 'You are not authorized to update this task.'], 403);
+    }
+    $task->progress = $validatedData['progress'];
+    $task->save();
+    return response()->json([
+        'message' => 'Task progress updated successfully.',
+        'task' => $task,
+    ], 200);
+}
+
+
 
 }

@@ -45,6 +45,9 @@ class ProjectController extends Controller
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
         'description' => 'required|string',
+        'due_date' => 'nullable|date',
+        'status' => 'nullable|in:pending,in_progress,completed',
+        'progress' => 'nullable|numeric|min:0|max:100',
         'assigned_users' => 'nullable|array',           
         'assigned_users.*' => 'exists:users,id',
     ]);
@@ -64,6 +67,9 @@ class ProjectController extends Controller
         $project->name = $request->name;
         $project->description = $request->description;
         $project->created_by = $creatorId;
+        $project->due_date = $request->due_date; 
+        $project->status = $request->status ?? 'pending';
+        $project->progress = $request->progress ?? 0;
         $project->save();
 
         $project->users()->attach($creatorId, ['is_admin' => true]);
@@ -135,7 +141,7 @@ class ProjectController extends Controller
         ], 404);
     }
     $projects = $user->projects()
-    ->with('tasks')
+    ->with('tasks')->withCount('tasks')
     ->withCount('users')
     ->get();
 
@@ -158,42 +164,78 @@ class ProjectController extends Controller
      * Update the specified resource in storage.
      */
     public function update(Request $request, string $id)
-    {
-        //
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string'
-        ]);
+{
+    // Validate incoming data
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'due_date' => 'nullable|date',
+        'status' => 'nullable|in:Pending,In Progress,Completed',
+        'progress' => 'nullable|numeric|min:0|max:100',
+    ]);
     
-        $project = Project::find($id);
-        if (!$project) {
-            return response([
-                'status' => 404,
-                'message' => "This project id $id does not exist",
-                'data' => null
-            ], 404);
-        }
-
-        $isAdmin = $project->users()->where('user_id', Auth::id())->wherePivot('is_admin', true)->exists();
-
-        if (!$isAdmin) {
-            return response([
-                'status' => 403,
-                'message' => 'Unauthorized',
-                'data' => null
-            ], 403);
-        }
-
-        $project->name = $validated['name'];
-        $project->description = $validated['description'];
-        $project->updated_by = Auth::id();
-        $project->save();
+    // Find the project
+    $project = Project::find($id);
+    if (!$project) {
         return response([
-            'status' => 200,
-            'message' => "Project with id $id updated successfully!",
-            'data' => $project
-        ], 200);
+            'status' => 404,
+            'message' => "This project id $id does not exist",
+            'data' => null
+        ], 404);
     }
+
+    // Check if the logged-in user is an admin of the project
+    $isAdmin = $project->users()->where('user_id', Auth::id())->wherePivot('is_admin', true)->exists();
+    if (!$isAdmin) {
+        return response([
+            'status' => 403,
+            'message' => 'Unauthorized',
+            'data' => null
+        ], 403);
+    }
+
+    // Check if the project due date is being updated and if it conflicts with task due dates
+    if ($request->has('due_date')) {
+        $newDueDate = $request->input('due_date');
+        
+        // Get all tasks associated with the project
+        $tasks = $project->tasks;
+        
+        // Check if the new due date is earlier than any task's due date
+        foreach ($tasks as $task) {
+            if ($newDueDate < $task->due_date) {
+                return response([
+                    'status' => 400,
+                    'message' => "The project due date cannot be earlier than  the task titled '{$task->title}' due date ({$task->due_date}).",
+                    'data' => null
+                ], 400);
+            }
+        }
+    }
+
+    // Proceed with updating the project
+    $project->name = $validated['name'];
+    $project->description = $validated['description'];
+    if ($request->has('due_date')) {
+        $project->due_date = $validated['due_date'];
+    }
+    if ($request->has('status')) {
+        $project->status = $request->status;
+    }
+
+    if ($request->has('progress')) {
+        $project->progress = $request->progress;
+    }
+    $project->updated_by = Auth::id();
+    $project->save();
+
+    return response([
+        'status' => 200,
+        'message' => "Project with id $id updated successfully!",
+        'data' => $project
+    ], 200);
+}
+
 
     /**
      * Remove the specified resource from storage.

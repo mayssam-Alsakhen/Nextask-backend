@@ -27,11 +27,14 @@ Route::middleware(['jwt.auth'])->group(function () {
     Route::delete('/projects/{projectId}/users/{userId}', [ProjectController::class, 'removeUserFromProject']);
 
     //tasks routes
-    Route::post('/tasks', [TaskController::class, 'store']);
-    Route::get('/tasks', [TaskController::class, 'index']);
-    Route::get('/tasks/{id}', [TaskController::class, 'show']);
-    Route::put('/tasks/{id}', [TaskController::class, 'update']);
-    Route::delete('/tasks/{id}', [TaskController::class, 'destroy']);
+    Route::prefix('tasks')->group(function () {
+        Route::post('/', [TaskController::class, 'store']);
+        Route::get('/', [TaskController::class, 'index']);
+        Route::get('/{id}', [TaskController::class, 'show']);
+        Route::put('/{id}', [TaskController::class, 'update']);
+        Route::put('/{id}/progress', [TaskController::class, 'updateProgress']);
+        Route::delete('/{id}', [TaskController::class, 'destroy']);
+    });
       
     // user routes
     Route::get('/user/{id}', [UserController::class, 'show']);
