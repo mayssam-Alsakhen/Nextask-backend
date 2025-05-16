@@ -27,4 +27,17 @@ public function updatedBy()
 {
     return $this->belongsTo(User::class, 'updated_by');
 }
+
+public function updateProgressFromTasks()
+{
+    $tasks = $this->tasks;
+
+    if ($tasks->count() === 0) {
+        return 0;
+    }
+
+    $totalProgress = $tasks->sum('progress');
+    return round($totalProgress / $tasks->count());
+}
+
 }

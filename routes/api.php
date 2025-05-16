@@ -7,6 +7,10 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\UserActivityController;
+use App\Http\Controllers\TaskAnalyticsController;
+
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -32,7 +36,7 @@ Route::middleware(['jwt.auth'])->group(function () {
         Route::get('/', [TaskController::class, 'index']);
         Route::get('/{id}', [TaskController::class, 'show']);
         Route::put('/{id}', [TaskController::class, 'update']);
-        Route::put('/{id}/progress', [TaskController::class, 'updateProgress']);
+        Route::patch('/{id}/progress', [TaskController::class, 'updateProgress']);
         Route::delete('/{id}', [TaskController::class, 'destroy']);
     });
       
@@ -45,6 +49,10 @@ Route::middleware(['jwt.auth'])->group(function () {
     Route::resource('comments', CommentController::class);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/users/{user_id}/activities', [UserActivityController::class, 'getUserActivities']);
+    Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+    Route::post('/dashboard/tasks/filter', [DashboardController::class, 'filteredTasks']);
+    Route::get('/analytics/completed-tasks', [TaskAnalyticsController::class, 'completedByMonth']);
 });
 Route::get('/user', function (Request $request) {
     return $request->user();

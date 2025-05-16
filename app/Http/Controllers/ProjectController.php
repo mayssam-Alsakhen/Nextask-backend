@@ -46,7 +46,7 @@ class ProjectController extends Controller
         'name' => 'required|string|max:255',
         'description' => 'required|string',
         'due_date' => 'nullable|date',
-        'status' => 'nullable|in:pending,in_progress,completed',
+        'status' => 'nullable|in:Pending,In Progress,Test, Completed',
         'progress' => 'nullable|numeric|min:0|max:100',
         'assigned_users' => 'nullable|array',           
         'assigned_users.*' => 'exists:users,id',
@@ -68,7 +68,7 @@ class ProjectController extends Controller
         $project->description = $request->description;
         $project->created_by = $creatorId;
         $project->due_date = $request->due_date; 
-        $project->status = $request->status ?? 'pending';
+        $project->status = $request->status ?? 'Pending';
         $project->progress = $request->progress ?? 0;
         $project->save();
 
@@ -144,7 +144,6 @@ class ProjectController extends Controller
     ->with('tasks')->withCount('tasks')
     ->withCount('users')
     ->get();
-
     return response([
         'status' => 200,
         'message' => "Projects for user ID $id",
@@ -170,7 +169,7 @@ class ProjectController extends Controller
         'name' => 'required|string|max:255',
         'description' => 'nullable|string',
         'due_date' => 'nullable|date',
-        'status' => 'nullable|in:Pending,In Progress,Completed',
+        'status' => 'nullable|in:Pending,In Progress,Test, Completed',
         'progress' => 'nullable|numeric|min:0|max:100',
     ]);
     

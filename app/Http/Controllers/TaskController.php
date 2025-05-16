@@ -75,6 +75,7 @@ class TaskController extends Controller
             'description' => 'nullable|string',
             'project_id' => 'required|exists:projects,id',
             'due_date' => 'required|date',
+            'progress' => 'nullable|integer|min:0|max:100',
             'isImportant' => 'required|boolean',
             'assigned_users' => 'nullable|array',
             'assigned_users.*' => 'exists:users,id',
@@ -90,7 +91,7 @@ class TaskController extends Controller
             'project_id' => $validated['project_id'],
             'due_date' => $validated['due_date'],
             'is_important' => $validated['isImportant'],
-            'progress' => 0,
+            'progress' => $validated['progress'] ?? 0,
         ]);
 
         // Assign multiple users to the task
@@ -98,6 +99,11 @@ class TaskController extends Controller
             $task->users()->sync($validated['assigned_users']);
         }
 
+        if ($task->project) {
+            $project = $task->project;
+            $project->progress = $project->updateProgressFromTasks();
+            $project->save();
+        }
         // Return a success response
         return response()->json([
             'message' => 'Task created and assigned successfully!',
@@ -207,8 +213,21 @@ class TaskController extends Controller
             $task->is_important = $validatedData['isImportant'];
         }
         if ($request->has('category')) {
-            $task->category = $validatedData['category'];
+            $newCategory = $validatedData['category'];
+        
+            // If marked as Completed and not already set
+            if ($newCategory === 'Completed' && !$task->completed_at) {
+                $task->completed_at = now();
+            }
+        
+            // If changed back from Completed to something else
+            if ($task->category === 'Completed' && $newCategory !== 'Completed') {
+                $task->completed_at = null;
+            }
+        
+            $task->category = $newCategory;
         }
+        
 
         // Handle assigned users
         if ($request->has('assigned_users')) {
@@ -216,21 +235,33 @@ class TaskController extends Controller
         }
 
         $task->save();
+        $task->load(['users', 'project.users']);
         return response()->json(['message' => 'Task updated successfully by admin.', 'task' => $task], 200);
     }
 
     // Assigned User: Only allowed to update category
-    if ($isAssignedUser) {
-        if ($request->has('category')) {
-            $task->category = $validatedData['category'];
-            $task->save();
-            return response()->json(['message' => 'Task updated successfully.', 'task' => $task], 200);
+   // Assigned User: Only allowed to update category
+if ($isAssignedUser) {
+    if ($request->has('category')) {
+        $newCategory = $validatedData['category'];
+
+        // Handle completed_at updates like in admin section
+        if ($newCategory === 'Completed' && !$task->completed_at) {
+            $task->completed_at = now();
+        }
+        if ($task->category === 'Completed' && $newCategory !== 'Completed') {
+            $task->completed_at = null;
         }
 
-        // If non-admin tries to update any other field, return error
-        return response()->json(['message' => 'You are only allowed to update the task category.'], 403);
+        $task->category = $newCategory;
+        $task->save();
+
+        return response()->json(['message' => 'Task updated successfully.', 'task' => $task], 200);
     }
+
+    return response()->json(['message' => 'You are only allowed to update the task category.'], 403);
 }
+}   
 
     
 
@@ -258,7 +289,11 @@ class TaskController extends Controller
     // Delete the task and its relations
     $task->users()->detach(); // Remove all assigned users from the task
     $task->delete();
-
+    if ($task->project) {
+        $project = $task->project;
+        $project->progress = $project->updateProgressFromTasks();
+        $project->save();
+    }
     return response()->json(['message' => 'Task deleted successfully.'], 200);
 }
 
@@ -284,12 +319,14 @@ public function updateProgress(Request $request, $id)
     }
     $task->progress = $validatedData['progress'];
     $task->save();
+    $project = $task->project;
+$project->progress = $project->updateProgressFromTasks();
+$project->save();
     return response()->json([
         'message' => 'Task progress updated successfully.',
         'task' => $task,
     ], 200);
 }
-
 
 
 }
