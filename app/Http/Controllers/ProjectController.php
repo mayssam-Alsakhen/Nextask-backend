@@ -169,7 +169,7 @@ class ProjectController extends Controller
         'name' => 'required|string|max:255',
         'description' => 'nullable|string',
         'due_date' => 'nullable|date',
-        'status' => 'nullable|in:Pending,In Progress,Test, Completed',
+        'status' => 'nullable|in:Pending,In Progress,Test,Completed',
         'progress' => 'nullable|numeric|min:0|max:100',
     ]);
     

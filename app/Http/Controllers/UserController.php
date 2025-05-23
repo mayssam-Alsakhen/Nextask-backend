@@ -17,28 +17,56 @@ class UserController extends Controller
         //
     }
     // Search user by email (only authenticated users)
+    // public function searchByEmail(Request $request)
+    // {
+    //     Log::info('searchByEmail method triggered');
+    //     if (!Auth::check()) {
+    //         return response()->json(['message' => 'Unauthorized'], 401);
+    //     }
+    
+    //     $request->validate([
+    //         'email' => 'required|email',
+    //     ]);
+    
+    //     // Trim spaces from the email
+    //     $email = trim($request->email);
+    //     Log::info('Search Email:', ['email' => $email]);
+    //     $user = User::where('email', $email)->first();
+    
+    //     if (!$user) {
+    //         return response()->json(['message' => 'User not found'], 404);
+    //     }
+    
+    //     return response()->json($user, 200);
+    // }
+
     public function searchByEmail(Request $request)
-    {
-        Log::info('searchByEmail method triggered');
-        if (!Auth::check()) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-    
-        $request->validate([
-            'email' => 'required|email',
-        ]);
-    
-        // Trim spaces from the email
-        $email = trim($request->email);
-        Log::info('Search Email:', ['email' => $email]);
-        $user = User::where('email', $email)->first();
-    
-        if (!$user) {
-            return response()->json(['message' => 'User not found'], 404);
-        }
-    
-        return response()->json($user, 200);
+{
+    Log::info('searchByEmail method triggered');
+
+    if (!Auth::check()) {
+        return response()->json(['message' => 'Unauthorized'], 401);
     }
+
+    // Validate the input to be just a string (not full email format)
+    $request->validate([
+        'email' => 'required|string|min:2',
+    ]);
+
+    // Trim the input
+    $email = trim($request->email);
+    Log::info('Search Email Starts With:', ['email' => $email]);
+
+    // Search users whose email starts with the input
+    $users = User::where('email', 'LIKE', $email . '%')->get();
+
+    if ($users->isEmpty()) {
+        return response()->json(['message' => 'No users found'], 404);
+    }
+
+    return response()->json($users, 200);
+}
+
     
 
     /**
