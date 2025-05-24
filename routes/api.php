@@ -10,6 +10,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserActivityController;
 use App\Http\Controllers\TaskAnalyticsController;
+use App\Http\Controllers\Api\ProjectReportController;
 
 
 Route::post('/register', [AuthController::class, 'register']);
@@ -24,6 +25,7 @@ Route::middleware(['jwt.auth'])->group(function () {
     Route::get('/search-project', [ProjectController::class, 'search']);
     Route::put('/projects/{id}', [ProjectController::class, 'update']);
     Route::delete('/projects/{id}', [ProjectController::class, 'destroy']);
+    Route::get('/projects/{id}/report', [ProjectReportController::class, 'show']);
           // add a user to the project
     Route::post('/projects/{projectId}/add-user', [ProjectController::class, 'addUserToProject']);
     Route::put('/projects/{projectId}/users/{userId}/admin', [ProjectController::class, 'setUserAsAdmin']);
