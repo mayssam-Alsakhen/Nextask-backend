@@ -25,4 +25,4 @@ RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
 EXPOSE 8080
 
 # Start Laravel using the built-in PHP server on the port Render assigns
-CMD php artisan serve --host=0.0.0.0 --port=${PORT:-8080}
+CMD php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8080}
