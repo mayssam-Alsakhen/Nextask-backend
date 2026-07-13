@@ -128,6 +128,31 @@ class ProjectController extends Controller
         return response($respond, 403);
     }
 
+    // check if user is admin of the project
+    public function isAdmin($projectId)
+{
+    $user = Auth::user();
+
+    $project = Project::where('id', $projectId)
+        ->whereHas('users', function ($query) use ($user) {
+            $query->where('users.id', $user->id);
+        })
+        ->with('users')
+        ->first();
+
+    if (!$project) {
+        return response()->json([
+            'is_admin' => false
+        ], 200);
+    }
+
+    $userInProject = $project->users->firstWhere('id', $user->id);
+
+    return response()->json([
+        'is_admin' => $userInProject?->pivot?->is_admin == 1
+    ], 200);
+}
+
     // get projects for specific user
     public function getProjectsByUserId($id)
 {

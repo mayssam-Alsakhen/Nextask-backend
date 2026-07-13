@@ -10,6 +10,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserActivityController;
 use App\Http\Controllers\TaskAnalyticsController;
+use App\Http\Controllers\AIController;
 use App\Http\Controllers\Api\ProjectReportController;
 
 
@@ -22,6 +23,7 @@ Route::middleware(['jwt.auth'])->group(function () {
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::get('/projects/user/{id}', [ProjectController::class, 'getProjectsByUserId']);
     Route::get('/projects/{id}', [ProjectController::class, 'show']);
+    Route::get('/projects/{id}/is-admin', [ProjectController::class, 'isAdmin']);
     Route::get('/search-project', [ProjectController::class, 'search']);
     Route::put('/projects/{id}', [ProjectController::class, 'update']);
     Route::delete('/projects/{id}', [ProjectController::class, 'destroy']);
@@ -41,6 +43,9 @@ Route::middleware(['jwt.auth'])->group(function () {
         Route::patch('/{id}/progress', [TaskController::class, 'updateProgress']);
         Route::delete('/{id}', [TaskController::class, 'destroy']);
     });
+
+    // AI routes
+    Route::post('/ai/generate-project-tasks', [AIController::class, 'generateProjectTasks']);
       
     // user routes
     Route::get('/user/{id}', [UserController::class, 'show']);

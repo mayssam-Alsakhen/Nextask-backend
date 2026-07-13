@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\Task;
 use App\Models\Project;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 
 class TaskController extends Controller
@@ -64,62 +65,69 @@ class TaskController extends Controller
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
-{
-    // Log the incoming request to debug
-    Log::info('Incoming Request:', $request->all());
+    {
+        // Log the incoming request to debug
+        Log::info('Incoming Request:', $request->all());
 
-    try {
-        // Validate the request
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'project_id' => 'required|exists:projects,id',
-            'due_date' => 'required|date',
-            'progress' => 'nullable|integer|min:0|max:100',
-            'isImportant' => 'required|boolean',
-            'assigned_users' => 'nullable|array',
-            'assigned_users.*' => 'exists:users,id',
-        ]);
+        try {
+            // 1) Validate the request
+            $validated = $request->validate([
+                'title'           => 'required|string|max:255',
+                'description'     => 'nullable|string',
+                'project_id'      => 'required|exists:projects,id',
+                'due_date'        => 'nullable|date',
+                'progress'        => 'nullable|integer|min:0|max:100',
+                'isImportant'     => 'required|boolean',
+                'assigned_users'  => 'nullable|array',
+                'assigned_users.*'=> 'exists:users,id',
+            ]);
 
-        // Log validated data for debugging
-        Log::info('Validated Data:', $validated);
+            // 2) Enforce: task due_date ≤ project due_date
+            $project    = Project::findOrFail($validated['project_id']);
+            $taskDate   = Carbon::parse($validated['due_date']);
+            $projectDue = Carbon::parse($project->due_date);
 
-        // Create the task
-        $task = Task::create([
-            'title' => $validated['title'],
-            'description' => $validated['description'] ?? null,
-            'project_id' => $validated['project_id'],
-            'due_date' => $validated['due_date'],
-            'is_important' => $validated['isImportant'],
-            'progress' => $validated['progress'] ?? 0,
-        ]);
+            if ($taskDate->gt($projectDue)) {
+                return response()->json([
+                    'message' => 'Task due date must be on or before the project due date ('.$project->due_date.').'
+                ], 422);
+            }
 
-        // Assign multiple users to the task
-        if (!empty($validated['assigned_users'])) {
-            $task->users()->sync($validated['assigned_users']);
+            // 3) Create the task
+            $task = Task::create([
+                'title'        => $validated['title'],
+                'description'  => $validated['description'] ?? null,
+                'project_id'   => $validated['project_id'],
+                'due_date'     => $validated['due_date'],
+                'is_important' => $validated['isImportant'],
+                'progress'     => $validated['progress'] ?? 0,
+            ]);
+
+            // 4) Assign users if provided
+            if (!empty($validated['assigned_users'])) {
+                $task->users()->sync($validated['assigned_users']);
+            }
+
+            // 5) Recalculate project progress
+            if ($task->project) {
+                $project->progress = $project->updateProgressFromTasks();
+                $project->save();
+            }
+
+            // 6) Return success response
+            return response()->json([
+                'message' => 'Task created and assigned successfully!',
+                'task'    => $task,
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('Error creating task: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to create task.',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
-
-        if ($task->project) {
-            $project = $task->project;
-            $project->progress = $project->updateProgressFromTasks();
-            $project->save();
-        }
-        // Return a success response
-        return response()->json([
-            'message' => 'Task created and assigned successfully!',
-            'task' => $task,
-        ], 201);
-    } catch (\Exception $e) {
-        // Log any errors for debugging
-        Log::error('Error creating task: ' . $e->getMessage());
-
-        // Return a failure response
-        return response()->json([
-            'message' => 'Failed to create task.',
-            'error' => $e->getMessage(),
-        ], 500);
     }
-}
 
     /**
      * Display the specified resource.
@@ -164,104 +172,111 @@ class TaskController extends Controller
      * Update the specified resource in storage.
      */
     public function update(Request $request, $id)
-{
-    // Validate input
-    $validatedData = $request->validate([
-        'title' => 'string|max:255|nullable',
-        'description' => 'string|nullable',
-        'due_date' => 'date|nullable',
-        'isImportant' => 'boolean|nullable',
-        'category' => 'string|in:Pending,In Progress,Completed,Test|nullable',
-        'assigned_users' => 'array|nullable',
-        'assigned_users.*' => 'exists:users,id',
-    ]);
+    {
+        // 1) Validate input
+        $validatedData = $request->validate([
+            'title'           => 'string|max:255|nullable',
+            'description'     => 'string|nullable',
+            'due_date'        => 'date|nullable',
+            'isImportant'     => 'boolean|nullable',
+            'category'        => 'string|in:Pending,In Progress,Completed,Test|nullable',
+            'assigned_users'  => 'array|nullable',
+            'assigned_users.*'=> 'exists:users,id',
+        ]);
 
-    // Find the task
-    $task = Task::find($id);
-    if (!$task) {
-        return response()->json(['message' => 'Task not found.'], 404);
-    }
-
-    // Get the logged-in user
-    $user = Auth::user();
-
-    // Check if the user is assigned to the task or is an admin of the project
-    $isAdmin = $task->project->users()
-        ->where('user_id', $user->id)
-        ->wherePivot('is_admin', true)
-        ->exists();
-    $isAssignedUser = $task->users()
-        ->where('user_id', $user->id)
-        ->exists();
-
-    if (!$isAdmin && !$isAssignedUser) {
-        return response()->json(['message' => 'You are not authorized to update this task.'], 403);
-    }
-
-    // Admin: Full control over task updates
-    if ($isAdmin) {
-        if ($request->has('title')) {
-            $task->title = $validatedData['title'];
+        // 2) Find the task
+        $task = Task::find($id);
+        if (!$task) {
+            return response()->json(['message' => 'Task not found.'], 404);
         }
-        if ($request->has('description')) {
-            $task->description = $validatedData['description'];
+
+        // 3) Auth checks
+        $user = Auth::user();
+        $isAdmin = $task->project->users()
+            ->where('user_id', $user->id)
+            ->wherePivot('is_admin', true)
+            ->exists();
+        $isAssignedUser = $task->users()
+            ->where('user_id', $user->id)
+            ->exists();
+
+        if (!$isAdmin && !$isAssignedUser) {
+            return response()->json(['message' => 'You are not authorized to update this task.'], 403);
         }
-        if ($request->has('due_date')) {
-            $task->due_date = $validatedData['due_date'];
-        }
-        if ($request->has('isImportant')) {
-            $task->is_important = $validatedData['isImportant'];
-        }
-        if ($request->has('category')) {
-            $newCategory = $validatedData['category'];
-        
-            // If marked as Completed and not already set
-            if ($newCategory === 'Completed' && !$task->completed_at) {
-                $task->completed_at = now();
+
+        // 4) Admin flow: full control
+        if ($isAdmin) {
+            if ($request->has('title')) {
+                $task->title = $validatedData['title'];
             }
-        
-            // If changed back from Completed to something else
-            if ($task->category === 'Completed' && $newCategory !== 'Completed') {
-                $task->completed_at = null;
+            if ($request->has('description')) {
+                $task->description = $validatedData['description'];
             }
-        
-            $task->category = $newCategory;
+            if ($request->has('due_date')) {
+                // Enforce: task due_date ≤ project due_date
+                $project    = $task->project;
+                $newDate    = Carbon::parse($validatedData['due_date']);
+                $projectDue = Carbon::parse($project->due_date);
+
+                if ($newDate->gt($projectDue)) {
+                    return response()->json([
+                        'message' => 'Task due date must be on or before the project due date ('.$project->due_date.').'
+                    ], 422);
+                }
+
+                $task->due_date = $validatedData['due_date'];
+            }
+            if ($request->has('isImportant')) {
+                $task->is_important = $validatedData['isImportant'];
+            }
+            if ($request->has('category')) {
+                $newCategory = $validatedData['category'];
+                if ($newCategory === 'Completed' && !$task->completed_at) {
+                    $task->completed_at = now();
+                }
+                if ($task->category === 'Completed' && $newCategory !== 'Completed') {
+                    $task->completed_at = null;
+                }
+                $task->category = $newCategory;
+            }
+
+            if ($request->has('assigned_users')) {
+                $task->users()->sync($validatedData['assigned_users']);
+            }
+
+            $task->save();
+            $task->load(['users', 'project.users']);
+
+            return response()->json([
+                'message' => 'Task updated successfully by admin.',
+                'task'    => $task
+            ], 200);
         }
-        
 
-        // Handle assigned users
-        if ($request->has('assigned_users')) {
-            $task->users()->sync($validatedData['assigned_users']);
+        // 5) Assigned user flow: only category
+        if ($isAssignedUser) {
+            if ($request->has('category')) {
+                $newCategory = $validatedData['category'];
+                if ($newCategory === 'Completed' && !$task->completed_at) {
+                    $task->completed_at = now();
+                }
+                if ($task->category === 'Completed' && $newCategory !== 'Completed') {
+                    $task->completed_at = null;
+                }
+                $task->category = $newCategory;
+                $task->save();
+
+                return response()->json([
+                    'message' => 'Task updated successfully.',
+                    'task'    => $task
+                ], 200);
+            }
+
+            return response()->json([
+                'message' => 'You are only allowed to update the task category.'
+            ], 403);
         }
-
-        $task->save();
-        $task->load(['users', 'project.users']);
-        return response()->json(['message' => 'Task updated successfully by admin.', 'task' => $task], 200);
-    }
-
-    // Assigned User: Only allowed to update category
-   // Assigned User: Only allowed to update category
-if ($isAssignedUser) {
-    if ($request->has('category')) {
-        $newCategory = $validatedData['category'];
-
-        // Handle completed_at updates like in admin section
-        if ($newCategory === 'Completed' && !$task->completed_at) {
-            $task->completed_at = now();
-        }
-        if ($task->category === 'Completed' && $newCategory !== 'Completed') {
-            $task->completed_at = null;
-        }
-
-        $task->category = $newCategory;
-        $task->save();
-
-        return response()->json(['message' => 'Task updated successfully.', 'task' => $task], 200);
-    }
-
-    return response()->json(['message' => 'You are only allowed to update the task category.'], 403);
-}
-}   
+    }  
 
     
 

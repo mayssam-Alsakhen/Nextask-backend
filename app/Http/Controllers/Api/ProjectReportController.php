@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
-use PDF;                // ← DomPDF facade
+use PDF;                // DomPDF facade
 use App\Models\Project;
 
 class ProjectReportController extends Controller

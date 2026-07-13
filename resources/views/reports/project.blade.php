@@ -26,7 +26,7 @@
     <thead>
       <tr>
         <th>Title</th><th>Status</th><th>Due Date</th>
-        <th>Important</th><th>Progress</th><th>Assigned</th>
+        <th>High Ptiority</th><th>Progress</th><th>Assigned</th>
       </tr>
     </thead>
     <tbody>
